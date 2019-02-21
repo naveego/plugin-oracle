@@ -5,7 +5,6 @@ import (
 	. "github.com/naveego/plugin-oracle/internal"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -30,11 +29,11 @@ func GetTestSettings() *Settings {
 	return  &Settings{
 		Strategy:StrategyForm,
 		Form:&SettingsForm{
-			Hostname:    "10.250.1.10",
-			Port:        32769,
-			ServiceName: "ORCLCDB.localdomain",
+			Hostname:    "localhost",
+			Port:        1521,
+			ServiceName: "ORCLCDB",
 			Username:    "C##NAVEEGO",
-			Password:    "temp123",
+			Password:    "n5o_ADMIN",
 		},
 	}
 }
@@ -42,7 +41,7 @@ func GetTestSettings() *Settings {
 var _ = BeforeSuite(func() {
 	//var err error
 
-	os.Setenv("LD_LIBRARY_PATH", "/home/steve/src/github.com/naveego/plugin-oracle/build/oracle/linux_amd64/instantclient_18_3")
+	//os.Setenv("LD_LIBRARY_PATH", "/home/steve/src/github.com/naveego/plugin-oracle/build/oracle/linux_amd64/instantclient_18_3")
 	// ldlibrarypath, ok := os.LookupEnv("LD_LIBRARY_PATH")
 	// Expect(ok).To(BeTrue(), "LD_LIBRARY_PATH must be set.")
 	// fmt.Println(ldlibrarypath)
