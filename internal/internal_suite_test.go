@@ -31,7 +31,7 @@ func GetTestSettings() *Settings {
 		Form:&SettingsForm{
 			Hostname:    "localhost",
 			Port:        1521,
-			ServiceName: "ORCLCDB",
+			ServiceName: "ORCLCDB.localdomain",
 			Username:    "C##NAVEEGO",
 			Password:    "n5o_ADMIN",
 		},
@@ -59,10 +59,55 @@ var _ = BeforeSuite(func() {
 	cmds := strings.Split(cmdText, ";")
 
 	for _, cmd := range cmds {
+		if cmd == "" {
+			continue
+		}
 		_, err := db.Exec(cmd)
+		if err != nil {
+			fmt.Println(cmd)
+		}
+
 		Expect(err).To(Or(Not(HaveOccurred()), MatchError(ContainSubstring("table or view does not exist"))), "should execute command " + cmd)
 	}
 
+	cmd := `grant SELECT, INSERT, UPDATE, DELETE ON C##NAVEEGO.AGENTS to SA`
+	_, err = db.Exec(cmd)
+	if err != nil {
+		fmt.Println(cmd)
+	}
+	Expect(err).To(Or(Not(HaveOccurred()), MatchError(ContainSubstring("table or view does not exist"))), "should execute command " + cmd)
+
+	cmd = `CREATE OR REPLACE PROCEDURE "C##NAVEEGO"."TEST"(
+i_AgentId IN C##NAVEEGO.AGENTS.AGENT_CODE%TYPE,
+i_Name IN C##NAVEEGO.AGENTS.AGENT_NAME%TYPE,
+i_Commission IN C##NAVEEGO.AGENTS.COMMISSION%TYPE)
+AS
+BEGIN
+        UPDATE C##NAVEEGO.Agents
+        SET AGENT_NAME = i_Name,
+            COMMISSION = i_Commission
+        WHERE AGENT_CODE = i_AgentId;
+        COMMIT;
+END;`
+	_, err = db.Exec(cmd)
+	if err != nil {
+		fmt.Println(cmd)
+	}
+	Expect(err).To(Or(Not(HaveOccurred()), MatchError(ContainSubstring("table or view does not exist"))), "should execute command " + cmd)
+
+	cmd = `CREATE OR REPLACE PROCEDURE SA.TEST(
+i_AgentId IN "C##NAVEEGO"."AGENTS".AGENT_CODE%TYPE,
+i_Name IN "C##NAVEEGO"."AGENTS".AGENT_NAME%TYPE,
+i_Commission IN "C##NAVEEGO"."AGENTS".COMMISSION%TYPE)
+AS
+BEGIN
+            "C##NAVEEGO"."TEST"(i_AgentId, i_Name, i_Commission);
+END;`
+	_, err = db.Exec(cmd)
+	if err != nil {
+		fmt.Println(cmd)
+	}
+	Expect(err).To(Or(Not(HaveOccurred()), MatchError(ContainSubstring("table or view does not exist"))), "should execute command " + cmd)
 })
 
 func connectToSQL() error {
@@ -84,12 +129,6 @@ func connectToSQL() error {
 	err = db.Ping()
 	if err != nil {
 		log.Printf("Error pinging SQL Host: %s", err)
-		return err
-	}
-
-	err = db.Ping()
-	if err != nil {
-		log.Printf("Error pinging w3 database: %s", err)
 		return err
 	}
 

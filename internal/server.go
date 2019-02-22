@@ -485,6 +485,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	var rows *sql.Rows
 	var sprocSchema, sprocName string
 	var err error
+	found := false
 
 	// get form data
 	var formData ConfigureWriteFormData
@@ -497,18 +498,30 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		goto Done
 	}
 
+	for _, safeProc := range s.StoredProcedures {
+		proc := removeSafeName(safeProc)
+		if proc == formData.StoredProcedure {
+			found = true
+			continue
+		}
+	}
+
+	if !found {
+		errArray = append(errArray, "stored procedure does not exist")
+		goto Done
+	}
+
 	sprocSchema, sprocName = decomposeSafeName(formData.StoredProcedure)
 
 	// get params for stored procedure
-	query = `SELECT ARGUMENT_NAME, DATA_TYPE FROM ALL_ARGUMENTS WHERE owner = ? and object_name = ?;
-`
+	query = `SELECT ARGUMENT_NAME, DATA_TYPE FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
 	stmt, err = s.db.Prepare(query)
 	if err != nil {
 		errArray = append(errArray, fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
 		goto Done
 	}
 
-	rows, err = stmt.Query(sprocSchema, sprocName)
+	rows, err = stmt.Query(sql.Named("owner", sprocSchema), sql.Named("name", sprocName))
 	if err != nil {
 		errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
 		goto Done
@@ -908,6 +921,20 @@ func decomposeSafeName(safeName string) (schema, name string) {
 		return strings.Trim(segs[0], `""`), strings.Trim(segs[1], `""`)
 	default:
 		return "", ""
+	}
+}
+
+func removeSafeName(safeName string) (name string){
+	segs := strings.Split(safeName, ".")
+	switch len(segs) {
+	case 0:
+		return ""
+	case 1:
+		return strings.Trim(segs[0], `""`)
+	case 2:
+		return fmt.Sprintf("%s.%s", strings.Trim(segs[0], `""`), strings.Trim(segs[1], `""`))
+	default:
+		return ""
 	}
 }
 
