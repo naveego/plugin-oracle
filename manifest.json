@@ -12,6 +12,8 @@
   "arch": "amd64",
   "canProduceMultipleSchemas": true,
   "canAcceptQueryBasedSchemas": true,
+  "canConfigureWrite": true,
+  "canWrite": true,
   "querySchema": {
     "ui": {
       "ui:widget": "code",
