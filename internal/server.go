@@ -600,29 +600,42 @@ func (s *Server) WriteStream(stream pub.Publisher_WriteStreamServer) error {
 		}
 
 		// process record and send ack
-		c1 := make(chan string, 1)
+		ackMsgCh := make(chan string, 1)
 		go func() {
+			defer close(ackMsgCh)
+
 			schema := s.WriteSettings.Schema
 
 			// build params for stored procedure
 			var args []interface{}
 			for _, prop := range schema.Properties {
-				args = append(args, sql.Named(prop.Id, recordData[prop.Id]))
+
+				rawValue := recordData[prop.Id]
+				var value interface{}
+				switch			 prop.Type {
+				case pub.PropertyType_DATE, pub.PropertyType_DATETIME:
+					stringValue, ok := rawValue.(string)
+					if !ok {
+						ackMsgCh <-fmt.Sprintf("cannot convert value %v to %s (was %T)", rawValue, prop.Type, rawValue)
+						return
+					}
+					value, err = time.Parse(time.RFC3339, stringValue)
+				}
+
+				args = append(args, sql.Named(prop.Id, value))
 			}
 
 			// call stored procedure and capture any error
 			_, err := s.db.Exec(schema.Query, args...)
 			if err != nil {
-				c1 <- fmt.Sprintf("could not write back: %s", err)
+				ackMsgCh <- fmt.Sprintf("could not write back: %s", err)
 			}
-
-			c1 <- ""
 		}()
 
 		// send ack when done writing or on timeout
 		select {
 		// done writing
-		case sendErr := <-c1:
+		case sendErr := <-ackMsgCh:
 			err := stream.Send(&pub.RecordAck{
 				CorrelationId: record.CorrelationId,
 				Error:         sendErr,
