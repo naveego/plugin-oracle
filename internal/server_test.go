@@ -531,7 +531,7 @@ var _ = Describe("Host", func() {
 
 			It("should return a schema when a valid stored procedure is input", func() {
 				req.Form = &pub.ConfigurationFormRequest{
-					DataJson: `{"storedProcedure":"C##NAVEEGO.TEST"}`,
+					DataJson: `{"storedProcedure":"\"C##NAVEEGO\".\"TEST\""}`,
 				}
 
 				response, err := sut.ConfigureWrite(context.Background(), req)
@@ -540,28 +540,8 @@ var _ = Describe("Host", func() {
 				Expect(response.Form).ToNot(BeNil())
 				Expect(response.Schema).ToNot(BeNil())
 
-				Expect(response.Schema.Id).To(Equal("C##NAVEEGO.TEST"))
-				Expect(response.Schema.Query).To(Equal("C##NAVEEGO.TEST"))
-				Expect(response.Schema.Properties).To(HaveLen(3))
-				Expect(response.Schema.Properties[0].Id).To(Equal("I_AGENTID"))
-				Expect(response.Schema.Properties[1].Id).To(Equal("I_NAME"))
-				Expect(response.Schema.Properties[2].Id).To(Equal("I_COMMISSION"))
-				Expect(response.Schema.Properties[2].Type).To(Equal(pub.PropertyType_FLOAT))
-			})
-
-			It("should return a schema when a valid stored procedure with schema is input", func() {
-				req.Form = &pub.ConfigurationFormRequest{
-					DataJson: `{"storedProcedure":"C##NAVEEGO.TEST"}`,
-				}
-
-				response, err := sut.ConfigureWrite(context.Background(), req)
-				Expect(err).ToNot(HaveOccurred())
-
-				Expect(response.Form).ToNot(BeNil())
-				Expect(response.Schema).ToNot(BeNil())
-
-				Expect(response.Schema.Id).To(Equal("C##NAVEEGO.TEST"))
-				Expect(response.Schema.Query).To(Equal("C##NAVEEGO.TEST"))
+				Expect(response.Schema.Id).To(Equal("\"C##NAVEEGO\".\"TEST\""))
+				Expect(response.Schema.Query).To(Equal("\"C##NAVEEGO\".\"TEST\""))
 				Expect(response.Schema.Properties).To(HaveLen(3))
 				Expect(response.Schema.Properties[0].Id).To(Equal("I_AGENTID"))
 				Expect(response.Schema.Properties[1].Id).To(Equal("I_NAME"))

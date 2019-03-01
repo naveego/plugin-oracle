@@ -31,7 +31,7 @@ func GetTestSettings() *Settings {
 		Form:&SettingsForm{
 			Hostname:    "localhost",
 			Port:        1521,
-			ServiceName: "ORCLCDB.localdomain",
+			ServiceName: "ORCLCDB",
 			Username:    "C##NAVEEGO",
 			Password:    "n5o_ADMIN",
 		},

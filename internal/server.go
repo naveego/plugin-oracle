@@ -495,12 +495,12 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	}
 
 	if formData.StoredProcedure == "" {
+		errArray = append(errArray, "stored procedure does not exist")
 		goto Done
 	}
 
 	for _, safeProc := range s.StoredProcedures {
-		proc := removeSafeName(safeProc)
-		if proc == formData.StoredProcedure {
+		if safeProc == formData.StoredProcedure {
 			found = true
 			continue
 		}
