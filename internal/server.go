@@ -486,6 +486,10 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	var sprocSchema, sprocName string
 	var err error
 	found := false
+	var schemaParams strings.Builder
+	var schemaProc strings.Builder
+	var schemaProcOut string
+	var schemaParamsOut string
 
 	// get form data
 	var formData ConfigureWriteFormData
@@ -512,9 +516,10 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	}
 
 	sprocSchema, sprocName = decomposeSafeName(formData.StoredProcedure)
+	schemaProc.WriteString(fmt.Sprintf("%s(", formData.StoredProcedure))
 
 	// get params for stored procedure
-	query = `SELECT ARGUMENT_NAME, DATA_TYPE FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
+	query = `SELECT ARGUMENT_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
 	stmt, err = s.db.Prepare(query)
 	if err != nil {
 		errArray = append(errArray, fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
@@ -530,7 +535,9 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	// add all params to properties of schema
 	for rows.Next() {
 		var colName, colType string
-		err := rows.Scan(&colName, &colType)
+		var length interface{}
+
+		err := rows.Scan(&colName, &colType, &length)
 		if err != nil {
 			errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
 			goto Done
@@ -542,7 +549,17 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 			TypeAtSource: colType,
 			Type: convertFromSQLType(colType, 0),
 		})
+
+		schemaParams.WriteString(fmt.Sprintf("%s %s", colName, colType))
+		if length != nil {
+			schemaParams.WriteString(fmt.Sprintf("(%s)", length))
+		}
+		schemaParams.WriteString(";")
+		schemaProc.WriteString(fmt.Sprintf(":%s,", colName))
 	}
+
+	schemaParamsOut = schemaParams.String()
+	schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
 
 Done:
 	// return write back schema
@@ -555,7 +572,7 @@ Done:
 		},
 		Schema: &pub.Schema{
 			Id:         formData.StoredProcedure,
-			Query:      formData.StoredProcedure,
+			Query:      fmt.Sprintf("DECLARE %s BEGIN %s END;", schemaParamsOut, schemaProcOut),
 			DataFlowDirection: pub.Schema_WRITE,
 			Properties: properties,
 		},
@@ -620,13 +637,15 @@ func (s *Server) WriteStream(stream pub.Publisher_WriteStreamServer) error {
 						return
 					}
 					value, err = time.Parse(time.RFC3339, stringValue)
+				default:
+					value = rawValue
 				}
 
 				args = append(args, sql.Named(prop.Id, value))
 			}
 
 			// call stored procedure and capture any error
-			_, err := s.db.Exec(schema.Query, args...)
+			_, err := s.db.ExecContext(context.Background(),schema.Query, args...)
 			if err != nil {
 				ackMsgCh <- fmt.Sprintf("could not write back: %s", err)
 			}

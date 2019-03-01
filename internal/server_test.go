@@ -541,7 +541,7 @@ var _ = Describe("Host", func() {
 				Expect(response.Schema).ToNot(BeNil())
 
 				Expect(response.Schema.Id).To(Equal("\"C##NAVEEGO\".\"TEST\""))
-				Expect(response.Schema.Query).To(Equal("\"C##NAVEEGO\".\"TEST\""))
+				Expect(response.Schema.Query).To(Equal(`DECLARE I_AGENTID CHAR(4);I_NAME VARCHAR2(40);I_COMMISSION BINARY_FLOAT; BEGIN "C##NAVEEGO"."TEST"(:I_AGENTID,:I_NAME,:I_COMMISSION); END;`))
 				Expect(response.Schema.Properties).To(HaveLen(3))
 				Expect(response.Schema.Properties[0].Id).To(Equal("I_AGENTID"))
 				Expect(response.Schema.Properties[1].Id).To(Equal("I_NAME"))
@@ -590,10 +590,16 @@ var _ = Describe("Host", func() {
 				req =  &pub.PrepareWriteRequest{
 					Schema: &pub.Schema{
 						Id: "TEST",
-						Query: "TEST",
+						Query: `DECLARE I_AGENTID CHAR(4);I_NAME VARCHAR2(40);I_COMMISSION BINARY_FLOAT; BEGIN "C##NAVEEGO"."TEST"(:I_AGENTID,:I_NAME,:I_COMMISSION); END;`,
 						Properties: []*pub.Property {
 							{
-								Id: "AgentId",
+								Id: "I_AGENTID",
+							},
+							{
+								Id: "I_NAME",
+							},
+							{
+								Id: "I_COMMISSION",
 							},
 						},
 					},
@@ -601,7 +607,7 @@ var _ = Describe("Host", func() {
 				}
 
 				records = append(records, &pub.Record{
-					DataJson: `{"AgentId":"A001"}`,
+					DataJson: `{"I_AGENTID":"A001","I_NAME":"TEST","I_COMMISSION":"0.11"}`,
 					CorrelationId: "test",
 				})
 
@@ -620,6 +626,7 @@ var _ = Describe("Host", func() {
 
 				Expect(stream.recordAcks).To(HaveLen(1))
 				Expect(stream.recordAcks[0].CorrelationId).To(Equal("test"))
+				Expect(stream.recordAcks[0].Error).To(Equal(""))
 			})
 		})
 	})
