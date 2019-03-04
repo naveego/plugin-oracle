@@ -607,7 +607,7 @@ var _ = Describe("Host", func() {
 				}
 
 				records = append(records, &pub.Record{
-					DataJson: `{"I_AGENTID":"A001","I_NAME":"TEST","I_COMMISSION":"0.11"}`,
+					DataJson: `{"I_AGENTID":"A001","I_NAME":"TEST","I_COMMISSION":"0.14"}`,
 					CorrelationId: "test",
 				})
 
