@@ -765,25 +765,8 @@ WHERE rownum <= %d `, query, req.Limit)
 			return nil
 		}
 
-		for i, p := range properties {
-			switch p.Type {
-			case pub.PropertyType_FLOAT:
-				var x float64
-				valueBuffer[i] = &x
-			case pub.PropertyType_INTEGER:
-				var x int64
-				valueBuffer[i] = &x
-			case pub.PropertyType_DECIMAL:
-				var x string
-				valueBuffer[i] = &x
-			default:
-				if strings.HasPrefix(p.TypeAtSource, "INTERVAL") {
-					var x string
-					valueBuffer[i] = &x
-				} else {
-					valueBuffer[i] = &valueBuffer[i]
-				}
-			}
+		for i := range properties {
+			valueBuffer[i] = &valueBuffer[i]
 		}
 		err = rows.Scan(valueBuffer...)
 		if err != nil {

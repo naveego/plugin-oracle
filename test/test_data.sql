@@ -67,7 +67,7 @@ VALUES ('A010', 'Santakumar', 'Chennai', '0.14', '007-22388644', TIMESTAMP '1969
 INSERT INTO C##NAVEEGO.Agents
 VALUES ('A012', 'Lucida', 'San Jose', '0.12', '044-52981425', TIMESTAMP '1971-01-02 00:00:00', '');
 INSERT INTO C##NAVEEGO.Agents
-VALUES ('A005', 'Anderson', 'Brisban', '0.13', '045-21447739', TIMESTAMP '1971-01-02 00:00:00', '');
+VALUES ('A005', 'Anderson', 'Brisban', null, '045-21447739', TIMESTAMP '1971-01-02 00:00:00', '');
 INSERT INTO C##NAVEEGO.Agents
 VALUES ('A001', 'Subbarao', 'Bangalore', '0.14', '077-12346674', TIMESTAMP '1971-01-02 00:00:00', '');
 INSERT INTO C##NAVEEGO.Agents
