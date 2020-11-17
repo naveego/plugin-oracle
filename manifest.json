@@ -33,7 +33,7 @@
         "ui:help": "This is provided for advanced use cases where your connection has complex configuration settings."
       },
       "stringWithPassword": {
-        "ui:order": ["connectionString", "password"],
+        "ui:order": ["connectionString", "password", "writeDiscovery"],
         "password": {
           "ui:widget": "password"
         }
@@ -44,7 +44,8 @@
           "port",
           "serviceName",
           "username",
-          "password"
+          "password",
+          "writeDiscovery"
         ],
         "password": {
           "ui:widget":"password"
