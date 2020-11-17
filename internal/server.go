@@ -498,7 +498,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
           "properties": {
             "storedProcedure": {
               "enum": [
-                %s
+                "%s"
               ]
             },
 			"customName":{
