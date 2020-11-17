@@ -95,6 +95,12 @@
                       "type": "string",
                       "description": "Enter the password. This value will be stored securely and will not be viewable by any user.",
                       "title": "Password"
+                    },
+                    "writeDiscovery": {
+                      "type": "boolean",
+                      "description": "Enables the auto discovery of outputs.",
+                      "default": true,
+                      "title": "Enable Output Discovery"
                     }
                   },
                   "required": [
@@ -135,6 +141,12 @@
                     "password": {
                       "type": "string",
                       "title": "Password"
+                    },
+                    "writeDiscovery": {
+                      "type": "boolean",
+                      "description": "Enables the auto discovery of outputs.",
+                      "default": true,
+                      "title": "Enable Output Discovery"
                     }
                   },
                   "required": [

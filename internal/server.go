@@ -19,6 +19,8 @@ import (
 	"strings"
 )
 
+const Custom = "Custom"
+
 type Server struct {
 	mu         *sync.Mutex
 	log        hclog.Logger
@@ -98,24 +100,27 @@ func (s *Server) Connect(ctx context.Context, req *pub.ConnectRequest) (*pub.Con
 	s.connected = true
 	s.settings = settings
 	s.StoredProcedures = nil
+	s.StoredProcedures = append(s.StoredProcedures, Custom)
 
-	// get stored procedures
-	rows, err := s.db.Query("SELECT owner, object_name FROM dba_objects WHERE object_type = 'PROCEDURE' AND oracle_maintained != 'Y' AND status = 'VALID'")
-	if err != nil {
-		return nil, errors.Errorf("could not read stored procedures from database: %s", err)
-	}
-
-	for rows.Next() {
-		var schema, name string
-		var safeName string
-		err = rows.Scan(&schema, &name)
+	if s.settings.ShouldDiscoverWrite() {
+		// get stored procedures
+		rows, err := s.db.Query("SELECT owner, object_name FROM dba_objects WHERE object_type = 'PROCEDURE' AND oracle_maintained != 'Y' AND status = 'VALID'")
 		if err != nil {
-			return nil, errors.Wrap(err, "could not read stored procedure schema")
+			return nil, errors.Errorf("could not read stored procedures from database: %s", err)
 		}
-		safeName = fmt.Sprintf(`"%s"."%s"`, schema, name)
-		s.StoredProcedures = append(s.StoredProcedures, safeName)
+
+		for rows.Next() {
+			var schema, name string
+			var safeName string
+			err = rows.Scan(&schema, &name)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not read stored procedure schema")
+			}
+			safeName = fmt.Sprintf(`"%s"."%s"`, schema, name)
+			s.StoredProcedures = append(s.StoredProcedures, safeName)
+		}
+		sort.Strings(s.StoredProcedures)
 	}
-	sort.Strings(s.StoredProcedures)
 
 	s.log.Debug("Connect completed successfully.")
 
@@ -474,19 +479,56 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 
 	storedProcedures, _ := json.Marshal(s.StoredProcedures)
 	schemaJSON := fmt.Sprintf(`{
-	"type": "object",
-	"properties": {
-		"storedProcedure": {
-			"type": "string",
-			"title": "Stored Procedure Name",
-			"description": "The name of the stored procedure",
-			"enum": %s
-		}
-	},
-	"required": [
-		"storedProcedure"
-	]
-}`, storedProcedures)
+  "type": "object",
+  "properties": {
+    "storedProcedure": {
+      "type": "string",
+      "title": "Stored Procedure Name",
+      "description": "The name of the stored procedure",
+      "enum": %s
+    }
+  },
+  "required": [
+    "storedProcedure"
+  ],
+  "dependencies": {
+    "storedProcedure": {
+      "oneOf": [
+        {
+          "properties": {
+            "storedProcedure": {
+              "enum": [
+                %s
+              ]
+            },
+			"customName":{
+			  "type": "string",
+			  "title": "Custom Stored Procedure Name"
+			},
+            "customParameters": {
+              "type": "array",
+              "title": "Parameters",
+              "description": "Parameters for a custom defined stored procedure",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "paramName": {
+                    "type": "string",
+                    "title": "Parameter Name"
+                  },
+                  "paramType": {
+                    "type": "string",
+                    "title": "Parameter Type"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}`, storedProcedures, Custom)
 
 	// first request return ui json schema form
 	if req.Form == nil || req.Form.DataJson == "" {
@@ -496,6 +538,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 				DataErrorsJson: "",
 				Errors:         nil,
 				SchemaJson: schemaJSON ,
+				UiJson: "",
 				StateJson: "",
 			},
 			Schema: nil,
@@ -510,6 +553,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	var sprocSchema, sprocName string
 	var err error
 	found := false
+	var schemaId string
 	var schemaParams strings.Builder
 	var schemaProc strings.Builder
 	var schemaProcOut string
@@ -524,6 +568,27 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 
 	if formData.StoredProcedure == "" {
 		errArray = append(errArray, "stored procedure does not exist")
+		goto Done
+	}
+
+	if formData.StoredProcedure == Custom {
+		for _, param := range formData.CustomParameters {
+			properties = append(properties, &pub.Property{
+				Id: param.ParamName,
+				Name: param.ParamType,
+				TypeAtSource: param.ParamType,
+				Type: convertFromSQLType(param.ParamType, 0),
+			})
+
+			schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
+			schemaParams.WriteString(";")
+			schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
+		}
+
+		schemaParamsOut = schemaParams.String()
+		schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
+		schemaId = formData.CustomName
+
 		goto Done
 	}
 
@@ -584,6 +649,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 
 	schemaParamsOut = schemaParams.String()
 	schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
+	schemaId = formData.StoredProcedure
 
 Done:
 	// return write back schema
@@ -595,7 +661,7 @@ Done:
 			SchemaJson:schemaJSON,
 		},
 		Schema: &pub.Schema{
-			Id:         formData.StoredProcedure,
+			Id:         schemaId,
 			Query:      fmt.Sprintf("DECLARE %s BEGIN %s END;", schemaParamsOut, schemaProcOut),
 			DataFlowDirection: pub.Schema_WRITE,
 			Properties: properties,
@@ -605,6 +671,13 @@ Done:
 
 type ConfigureWriteFormData struct {
 	StoredProcedure string `json:"storedProcedure,omitempty"`
+	CustomName string `json:"customName,omitempty"`
+	CustomParameters []Parameter `json:"customParameters,omitempty"`
+}
+
+type Parameter struct {
+	ParamName string `json:"paramName"`
+	ParamType string `json:"paramType"`
 }
 
 // PrepareWrite sets up the plugin to be able to write back
