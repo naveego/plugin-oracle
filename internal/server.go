@@ -595,13 +595,31 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	query = `SELECT ARGUMENT_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
 	stmt, err = s.db.Prepare(query)
 	if err != nil {
+		s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
 		errArray = append(errArray, fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
 		goto Done
 	}
 
 	rows, err = stmt.Query(sql.Named("owner", sprocSchema), sql.Named("name", sprocName))
 	if err != nil {
-		errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
+		// attempt to apply user defined parameters if query does not work
+		if len(formData.CustomParameters) > 0 {
+			for _, param := range formData.CustomParameters {
+				properties = append(properties, &pub.Property{
+					Id: param.ParamName,
+					Name: param.ParamType,
+					TypeAtSource: param.ParamType,
+					Type: convertFromSQLType(param.ParamType, 0),
+				})
+
+				schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
+				schemaParams.WriteString(";")
+				schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
+			}
+		} else {
+			s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
+			errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
+		}
 		goto Done
 	}
 
@@ -612,24 +630,8 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 
 		err := rows.Scan(&colName, &colType, &length)
 		if err != nil {
-			// attempt to apply user defined parameters if query does not work
-			if len(formData.CustomParameters) > 0 {
-				for _, param := range formData.CustomParameters {
-					properties = append(properties, &pub.Property{
-						Id: param.ParamName,
-						Name: param.ParamType,
-						TypeAtSource: param.ParamType,
-						Type: convertFromSQLType(param.ParamType, 0),
-					})
-
-					schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
-					schemaParams.WriteString(";")
-					schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
-				}
-			} else {
-				errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
-			}
-
+			s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
+			errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
 			goto Done
 		}
 
