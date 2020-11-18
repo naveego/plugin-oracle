@@ -571,27 +571,6 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		goto Done
 	}
 
-	if formData.StoredProcedure == Custom {
-		for _, param := range formData.CustomParameters {
-			properties = append(properties, &pub.Property{
-				Id: param.ParamName,
-				Name: param.ParamType,
-				TypeAtSource: param.ParamType,
-				Type: convertFromSQLType(param.ParamType, 0),
-			})
-
-			schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
-			schemaParams.WriteString(";")
-			schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
-		}
-
-		schemaParamsOut = schemaParams.String()
-		schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
-		schemaId = formData.CustomName
-
-		goto Done
-	}
-
 	for _, safeProc := range s.StoredProcedures {
 		if safeProc == formData.StoredProcedure {
 			found = true
@@ -599,13 +578,18 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		}
 	}
 
-	if !found {
+	if !found && formData.StoredProcedure != Custom {
 		errArray = append(errArray, "stored procedure does not exist")
 		goto Done
 	}
 
-	sprocSchema, sprocName = decomposeSafeName(formData.StoredProcedure)
-	schemaProc.WriteString(fmt.Sprintf("%s(", formData.StoredProcedure))
+	schemaId = formData.StoredProcedure
+	if formData.StoredProcedure == Custom {
+		schemaId = formData.CustomName
+	}
+
+	sprocSchema, sprocName = decomposeSafeName(schemaId)
+	schemaProc.WriteString(fmt.Sprintf("%s(", schemaId))
 
 	// get params for stored procedure
 	query = `SELECT ARGUMENT_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
@@ -628,7 +612,24 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 
 		err := rows.Scan(&colName, &colType, &length)
 		if err != nil {
-			errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
+			// attempt to apply user defined parameters if query does not work
+			if len(formData.CustomParameters) > 0 {
+				for _, param := range formData.CustomParameters {
+					properties = append(properties, &pub.Property{
+						Id: param.ParamName,
+						Name: param.ParamType,
+						TypeAtSource: param.ParamType,
+						Type: convertFromSQLType(param.ParamType, 0),
+					})
+
+					schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
+					schemaParams.WriteString(";")
+					schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
+				}
+			} else {
+				errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
+			}
+
 			goto Done
 		}
 
@@ -647,11 +648,10 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		schemaProc.WriteString(fmt.Sprintf(":%s,", colName))
 	}
 
+Done:
 	schemaParamsOut = schemaParams.String()
 	schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
-	schemaId = formData.StoredProcedure
 
-Done:
 	// return write back schema
 	return &pub.ConfigureWriteResponse{
 		Form: &pub.ConfigurationFormResponse{
