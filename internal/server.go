@@ -574,6 +574,7 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	for _, safeProc := range s.StoredProcedures {
 		if safeProc == formData.StoredProcedure {
 			found = true
+			s.log.Info("found stored procedure", "stored procedure", safeProc)
 			continue
 		}
 	}
@@ -586,10 +587,13 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	schemaId = formData.StoredProcedure
 	if formData.StoredProcedure == Custom {
 		schemaId = formData.CustomName
+		s.log.Info("found custom stored procedure", "stored procedure", schemaId)
 	}
 
 	sprocSchema, sprocName = decomposeSafeName(schemaId)
 	schemaProc.WriteString(fmt.Sprintf("%s(", schemaId))
+
+	s.log.Info("got decomposed schema name", "owner", sprocSchema, "object name", sprocName)
 
 	// get params for stored procedure
 	query = `SELECT ARGUMENT_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_ARGUMENTS WHERE owner = :owner and object_name = :name`
@@ -600,10 +604,13 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		goto Done
 	}
 
+	s.log.Info("prepared query", "query", query)
+
 	rows, err = stmt.Query(sql.Named("owner", sprocSchema), sql.Named("name", sprocName))
 	if err != nil {
 		// attempt to apply user defined parameters if query does not work
 		if len(formData.CustomParameters) > 0 {
+			s.log.Info("building schema from custom parameters")
 			for _, param := range formData.CustomParameters {
 				properties = append(properties, &pub.Property{
 					Id: param.ParamName,
@@ -622,6 +629,8 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		}
 		goto Done
 	}
+
+	s.log.Info("got rows for query", "query", query)
 
 	// add all params to properties of schema
 	for rows.Next() {
