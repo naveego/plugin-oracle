@@ -601,33 +601,16 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 	if err != nil {
 		s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
 		errArray = append(errArray, fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
-		goto Done
+		goto CustomProperties
 	}
 
 	s.log.Info("prepared query", "query", query)
 
 	rows, err = stmt.Query(sql.Named("owner", sprocSchema), sql.Named("name", sprocName))
 	if err != nil {
-		// attempt to apply user defined parameters if query does not work
-		if len(formData.CustomParameters) > 0 {
-			s.log.Info("building schema from custom parameters")
-			for _, param := range formData.CustomParameters {
-				properties = append(properties, &pub.Property{
-					Id: param.ParamName,
-					Name: param.ParamType,
-					TypeAtSource: param.ParamType,
-					Type: convertFromSQLType(param.ParamType, 0),
-				})
-
-				schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
-				schemaParams.WriteString(";")
-				schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
-			}
-		} else {
-			s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
-			errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
-		}
-		goto Done
+		s.log.Error(fmt.Sprintf("error preparing to get parameters for stored procedure: %s", err))
+		errArray = append(errArray, fmt.Sprintf("error getting parameters for stored procedure: %s", err))
+		goto CustomProperties
 	}
 
 	s.log.Info("got rows for query", "query", query)
@@ -659,7 +642,27 @@ func (s *Server) ConfigureWrite(ctx context.Context, req *pub.ConfigureWriteRequ
 		schemaProc.WriteString(fmt.Sprintf(":%s,", colName))
 	}
 
-Done:
+	CustomProperties:
+	if len(properties) == 0 {
+		// attempt to apply user defined parameters if query does not work
+		if len(formData.CustomParameters) > 0 {
+			s.log.Info("building schema from custom parameters")
+			for _, param := range formData.CustomParameters {
+				properties = append(properties, &pub.Property{
+					Id:           param.ParamName,
+					Name:         param.ParamType,
+					TypeAtSource: param.ParamType,
+					Type:         convertFromSQLType(param.ParamType, 0),
+				})
+
+				schemaParams.WriteString(fmt.Sprintf("%s %s", param.ParamName, param.ParamType))
+				schemaParams.WriteString(";")
+				schemaProc.WriteString(fmt.Sprintf(":%s,", param.ParamName))
+			}
+		}
+	}
+
+	Done:
 	schemaParamsOut = schemaParams.String()
 	schemaProcOut = fmt.Sprintf("%s);", strings.TrimSuffix(schemaProc.String(), ","))
 
